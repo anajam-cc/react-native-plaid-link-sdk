@@ -1,22 +1,48 @@
 import PropTypes from 'prop-types';
-import React from 'react';
-import { NativeModules, Platform, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Linking,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+  TouchableOpacity,
+} from 'react-native';
+
+/**
+ * A hook that registers a listener on the plaid emitter for the 'onEvent' type.
+ * The listener is cleaned up when this view is unmounted
+ *
+ * @param onEventListener the listener to call
+ */
+export const usePlaidEmitter = (onEventListener) => {
+  useEffect(() => {
+    const emitter = new NativeEventEmitter(
+      Platform.OS === 'ios'
+        ? NativeModules.RNLinksdk
+        : NativeModules.PlaidAndroid,
+    );
+    const listener = emitter.addListener('onEvent', onEventListener);
+    // Clean up after this effect:
+    return function cleanup() {
+      listener.remove();
+    };
+  }, []);
+};
 
 export const openLink = async ({ onExit, onSuccess, ...serializable }) => {
   if (Platform.OS === 'android') {
-    const constants = NativeModules.PlaidAndroid.getConstants();
     NativeModules.PlaidAndroid.startLinkActivityForResult(
       JSON.stringify(serializable),
-      result => {
+      (result) => {
         if (onSuccess != null) {
           onSuccess(result.data);
         }
       },
-      result => {
+      (result) => {
         if (onExit != null) {
           onExit(result.data);
         }
-      }
+      },
     );
   } else {
     NativeModules.RNLinksdk.create(serializable);
@@ -31,11 +57,13 @@ export const openLink = async ({ onExit, onSuccess, ...serializable }) => {
         switch (metadata.status) {
           case 'connected':
             if (onSuccess != null) {
+	          delete metadata.status;
               onSuccess(metadata);
             }
             break;
           default:
             if (onExit != null) {
+	          delete metadata.status;
               onExit(metadata);
             }
             break;
@@ -56,6 +84,24 @@ const handlePress = (linkProps, componentProps) => {
   if (componentProps && componentProps.onPress) {
     componentProps.onPress();
   }
+};
+
+const useMount = (func) => useEffect(() => func(), []);
+
+export const useDeepLinkRedirector = () => {
+  const _handleListenerChange = (event) => {
+    if (event.url !== null && Platform.OS === 'ios') {
+      NativeModules.RNLinksdk.continueFromRedirectUriString(event.url);
+    }
+  };
+
+  useEffect(() => {
+    Linking.addEventListener('url', _handleListenerChange);
+
+    return function cleanup() {
+      Linking.removeEventListener('url', _handleListenerChange);
+    };
+  }, []);
 };
 
 export const PlaidLink = ({
@@ -87,10 +133,10 @@ PlaidLink.propTypes = {
 
   // The public_key associated with your account; available from
   // the Plaid dashboard (https://dashboard.plaid.com).
-  // 
+  //
   // [DEPRECATED] - instead, pass a Link token into the token field.
   // Create a Link token with the /link/token/create endpoint.
-  publicKey: props => {
+  publicKey: (props) => {
     if (!props.publicKey && !props.token) {
       return new Error(`One of props 'publicKey' or 'token' is required`);
     }
@@ -99,7 +145,9 @@ PlaidLink.propTypes = {
         `Invalid prop 'publicKey': Expected string instead of ${typeof props.publicKey}`,
       );
     }
-    console.log("The public_key is being deprecated. Learn how to upgrade to link_tokens at https://plaid.com/docs/#create-link-token");
+    console.log(
+      'The public_key is being deprecated. Learn how to upgrade to link_tokens at https://plaid.com/docs/#create-link-token',
+    );
   },
 
   // Displayed once a user has successfully linked their account
@@ -163,11 +211,6 @@ PlaidLink.propTypes = {
   // Specify a webhook to associate with a user.
   webhook: PropTypes.string,
 
-  // Specify an existing payment token to launch Link in payment initation mode.
-  // This will cause Link to open a payment confirmation dialog prior to
-  // institution selection.
-  paymentToken: PropTypes.string,
-
   // An oauthNonce is required to support OAuth authentication flows when
   // launching Link within a WebView and using one or more European country
   // codes. The nonce must be at least 16 characters long.
@@ -176,7 +219,7 @@ PlaidLink.propTypes = {
   // An oauthRedirectUri is required to support OAuth authentication flows when
   // launching or re-launching Link within a WebView and using one or more
   // European country codes.
-  oauthRedirectUri: function(props, propName) {
+  oauthRedirectUri: function (props, propName) {
     let value = props[propName];
     if (value === undefined || value === null) {
       return;
@@ -194,13 +237,8 @@ PlaidLink.propTypes = {
     }
   },
 
-  // An oauthStateId is required to support OAuth authentication and payment flows when
-  // re-launching Link within a WebView and using one or more European country
-  // codes.
-  oauthStateId: PropTypes.string,
-
   // Underlying component to render
-  component: PropTypes.func,
+  component: PropTypes.elementType,
 
   // Props for underlying component
   componentProps: PropTypes.object,
