@@ -58,14 +58,12 @@ followed by
 ### 3. Configure Gradle
 1. Go to the project level `android/app/build.gradle`
 2. Make sure you are using a min sdk >= 21
-3. Use the latest Android link version ![version](https://img.shields.io/bintray/v/plaid/link-android/com.plaid.link)
-4. Add the following dependencies:
+3. Add the following dependencies:
 
 ```groovy
 dependencies {
     // ...
     implementation project(':react-native-plaid-link-sdk')
-    implementation 'com.plaid.link:sdk-core:<insert latest version>'
     implementation 'com.squareup.okhttp3:okhttp-urlconnection:<insert at least version 4.x>'
 }
 ```
@@ -81,6 +79,7 @@ project(':react-native-plaid-link-sdk').projectDir = new File(rootProject.projec
 ## Version Compatibiltiy
 | React Native SDK | Android SDK | iOS SDK | Status |
 |---|---|---|---|
+| 6.x.x | [3.0.0+)      | >=2.0.1  | Active |
 | 5.x.x | [2.1.0+)      | >=1.1.34 | Active |
 | 4.x.x | [2.0.0-2.1.0) | <=1.1.33 | Active |
 | 3.x.x | [1.0.0-2.0.0) | <=1.1.33 |  Deprecated |
@@ -114,7 +113,13 @@ const MyPlaidComponent = () => {
 
 ### OAuth requirements
 
-If you configured your `link_token` with one or more European country codes and are using React Native iOS, your integration will require additional Link configuration parameters (`oauthNonce`, `oauthRedirectUri`, and `oauthStateId`) in order to support OAuth authentication flows. You will also need to configure a universal link. See [OAuth requirements](https://plaid.com/docs/#oauth) for more information.
+For Link Token based OAuth support, you must configure your `link_token` with a `redirect_uri` to support OAuth on iOS. Other than setting the `redirect_uri`, which must be a universal link, when you create the `link_token` no further configuration is required. Notably, no props are required on the React Native side.
+
+For non-Link Token based OAuth support, you must pass two props to the PlaidLink React Native component:
+1. `oauthRedirectUri` this is the same uri you would pass to the `redirect_uri` for Link Token based OAuth. It must be registered as a universal link.
+2. `oauthNonce` this is a 16 character nonce.
+
+In order for the React Native app to respond to the universal link, you will need to update your AppDelegate to inform the React Native Linking library when the universal link is received. See [OAuth requirements](https://plaid.com/docs/#oauth) for more information.
 
 ### To receive onEvent callbacks:
 
